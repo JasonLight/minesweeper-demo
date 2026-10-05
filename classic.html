@@ -1,0 +1,111 @@
+<!DOCTYPE html>
+<html lang="zh-Hant-TW">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>踩地雷｜掃雷企業主</title>
+<style>
+  body{font-family:"Noto Sans TC",system-ui,sans-serif;background:#1e2a38;color:#eee;display:flex;flex-direction:column;align-items:center;margin:0;padding:20px;user-select:none}
+  h1{margin:4px 0 12px;font-size:24px}
+  .bar{display:flex;gap:10px;align-items:center;margin-bottom:12px;flex-wrap:wrap;justify-content:center}
+  select,button{font-size:15px;padding:6px 12px;border-radius:8px;border:none;cursor:pointer}
+  .info{background:#000;color:#f33;font-family:monospace;font-size:22px;padding:4px 10px;border-radius:6px;min-width:56px;text-align:center}
+  #face{font-size:26px;background:#ffd34d;padding:2px 10px}
+  #board{display:grid;gap:2px;background:#555;padding:4px;border-radius:8px;touch-action:manipulation}
+  .c{width:28px;height:28px;display:flex;align-items:center;justify-content:center;font-weight:bold;font-size:16px;background:#9fb3c8;border-radius:3px;cursor:pointer}
+  .c:hover{background:#b5c7d9}
+  .c.open{background:#e6e6e6;cursor:default}
+  .c.boom{background:#f44}
+  .n1{color:#1976d2}.n2{color:#388e3c}.n3{color:#d32f2f}.n4{color:#7b1fa2}.n5{color:#ff8f00}.n6{color:#0097a7}.n7{color:#000}.n8{color:#757575}
+  #msg{margin-top:12px;font-size:18px;min-height:26px}
+  .tip{font-size:13px;color:#aab;margin-top:6px;text-align:center}
+  #best{font-size:13px;color:#ccd;margin-top:4px}
+</style>
+</head>
+<body>
+<h1>💣 踩地雷</h1>
+<div class="bar">
+  <select id="level">
+    <option value="9,9,10">初級 9×9・10 雷</option>
+    <option value="16,16,40">中級 16×16・40 雷</option>
+    <option value="16,30,99">高級 16×30・99 雷</option>
+  </select>
+  <button id="flagMode">🚩 插旗模式：關</button>
+</div>
+<div class="bar">
+  <div class="info" id="mines">010</div>
+  <button id="face">🙂</button>
+  <div class="info" id="timer">000</div>
+</div>
+<div id="board"></div>
+<div id="msg"></div>
+<div id="best"></div>
+<div class="tip">左鍵翻開・右鍵插旗・點已翻開的數字可快速翻周圍（旗數對時）<br>手機：長按插旗，或開啟「插旗模式」</div>
+<script>
+let R,C,M,grid,started,over,opened,flags,timer,sec,flagMode=false;
+const $=id=>document.getElementById(id);
+const pad=n=>String(Math.max(-99,Math.min(999,n))).padStart(3,'0');
+function init(){
+  [R,C,M]=$('level').value.split(',').map(Number);
+  grid=[];started=false;over=false;opened=0;flags=0;sec=0;clearInterval(timer);
+  $('timer').textContent='000';$('mines').textContent=pad(M);$('face').textContent='🙂';$('msg').textContent='';
+  const b=$('board');b.innerHTML='';b.style.gridTemplateColumns=`repeat(${C},28px)`;
+  for(let r=0;r<R;r++){grid.push([]);for(let c=0;c<C;c++){
+    const el=document.createElement('div');el.className='c';
+    const cell={r,c,mine:false,n:0,open:false,flag:false,el};grid[r].push(cell);
+    el.onclick=()=>flagMode&&!cell.open?toggleFlag(cell):click(cell);
+    el.oncontextmenu=e=>{e.preventDefault();toggleFlag(cell)};
+    let t;el.ontouchstart=()=>{t=setTimeout(()=>{toggleFlag(cell);t=null},450)};
+    el.ontouchend=e=>{if(t===null){e.preventDefault()}clearTimeout(t)};
+    b.appendChild(el);
+  }}
+  showBest();
+}
+const nb=(cell)=>{const a=[];for(let dr=-1;dr<=1;dr++)for(let dc=-1;dc<=1;dc++){if(!dr&&!dc)continue;const r=cell.r+dr,c=cell.c+dc;if(r>=0&&r<R&&c>=0&&c<C)a.push(grid[r][c])}return a};
+function place(first){
+  const safe=new Set([first,...nb(first)]);let pool=grid.flat().filter(x=>!safe.has(x));
+  if(pool.length<M)pool=grid.flat().filter(x=>x!==first);
+  for(let i=0;i<M;i++){const j=i+Math.floor(Math.random()*(pool.length-i));[pool[i],pool[j]]=[pool[j],pool[i]];pool[i].mine=true}
+  grid.flat().forEach(x=>x.n=nb(x).filter(y=>y.mine).length);
+  started=true;timer=setInterval(()=>{sec++;$('timer').textContent=pad(sec)},1000);
+}
+function click(cell){
+  if(over||cell.flag)return;
+  if(!started)place(cell);
+  if(cell.open){chord(cell);return}
+  reveal(cell);check();
+}
+function reveal(cell){
+  const st=[cell];
+  while(st.length){const x=st.pop();if(x.open||x.flag)continue;
+    x.open=true;opened++;x.el.classList.add('open');
+    if(x.mine){x.el.textContent='💥';x.el.classList.add('boom');lose();return}
+    if(x.n){x.el.textContent=x.n;x.el.classList.add('n'+x.n)}else st.push(...nb(x));}
+}
+function chord(cell){
+  if(!cell.n)return;const ns=nb(cell);
+  if(ns.filter(x=>x.flag).length===cell.n){ns.forEach(x=>{if(!x.open&&!x.flag&&!over)reveal(x)});check()}
+}
+function toggleFlag(cell){
+  if(over||cell.open)return;cell.flag=!cell.flag;flags+=cell.flag?1:-1;
+  cell.el.textContent=cell.flag?'🚩':'';$('mines').textContent=pad(M-flags);
+}
+function lose(){
+  over=true;clearInterval(timer);$('face').textContent='😵';$('msg').textContent='踩到地雷了！再來一局？';
+  grid.flat().forEach(x=>{if(x.mine&&!x.open&&!x.flag)x.el.textContent='💣';if(!x.mine&&x.flag)x.el.textContent='❌'});
+}
+function check(){
+  if(over||opened!==R*C-M)return;
+  over=true;clearInterval(timer);$('face').textContent='😎';
+  grid.flat().forEach(x=>{if(x.mine){x.flag=true;x.el.textContent='🚩'}});$('mines').textContent='000';
+  const k='ms_best_'+$('level').value,b=localStorage.getItem(k);
+  let s=`過關！用時 ${sec} 秒 🎉`;if(!b||sec<+b){localStorage.setItem(k,sec);s+='　新紀錄！'}
+  $('msg').textContent=s;showBest();
+}
+function showBest(){const b=localStorage.getItem('ms_best_'+$('level').value);$('best').textContent=b?`本難度最佳紀錄：${b} 秒`:''}
+$('face').onclick=init;$('level').onchange=init;
+$('flagMode').onclick=()=>{flagMode=!flagMode;$('flagMode').textContent=`🚩 插旗模式：${flagMode?'開':'關'}`};
+init();
+</script>
+</body>
+</html>
